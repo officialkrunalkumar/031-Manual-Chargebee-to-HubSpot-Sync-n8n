@@ -1,0 +1,546 @@
+{
+  "name": "Manual Chargebee to HubSpot Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://zeniai.chargebee.com/api/v2/subscriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "customer_id[is]",
+              "value": "89839"
+            }
+          ]
+        },
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "name": "offset",
+                    "value": "={{ $response.body.next_offset }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ $response.body.next_offset === $request.qs.offset }}",
+              "requestInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "8e499281-9ad8-45a4-a1be-783640e0450c",
+      "name": "Get Subscriptions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1180,
+        360
+      ],
+      "alwaysOutputData": false,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "bQk6d57JMeg6nONB",
+          "name": "Chargebee"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "6b27d626-c6db-4136-bd7a-f857e02310d5",
+              "leftValue": "={{ $json.list }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1fc14d8-8835-470b-8d1c-72a5b2173cae",
+      "name": "Data Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "list",
+        "options": {}
+      },
+      "id": "2f48d19a-fb8c-4aaa-ad34-c8d7cb5f5d3f",
+      "name": "Split Out",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1580,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "d0848a33-36df-4d0c-85f7-26cb5b5d68ae",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/2-14800898/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"limit\":1,\"after\":\"0\",\"sorts\":[\"desc\"],\"properties\":[\"subscription_id\"],\"filterGroups\":[{\"filters\":[{\"propertyName\":\"subscription_id\",\"value\":\"{{ $json.subscription.id }}\",\"operator\":\"EQ\"}]}]}",
+        "options": {}
+      },
+      "id": "e26fcac7-bb77-4c3b-8335-084045fee5fa",
+      "name": "Get Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2360,
+        260
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "NdgbeV1lhKBhg4W4",
+          "name": "HubSpot Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "5bdc0b11-4240-4206-9392-b8c0a7e6baaf",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f836927c-8224-45f2-8e8e-589a2a4f3fbd",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.hubapi.com/crm/v3/objects/2-14800898/{{ $json.results[0].properties.hs_object_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n\"properties\": {\n        \"subscription_id\": \"{{ $('Loop Over Items').item.json.subscription.id }}\",\n        \"plan_name\": \"{{ $('Loop Over Items').item.json.subscription.plan_id }}\",\n        \"plan_quantity\": \"{{ $('Loop Over Items').item.json.subscription.plan_quantity }}\",\n        \"plan_unit_price\": \"{{ $('Loop Over Items').item.json.subscription.plan_unit_price }}\",\n        \"billing_period\": \"{{ $('Loop Over Items').item.json.subscription.billing_period }}\",\n        \"billing_period_unit\": \"{{ $('Loop Over Items').item.json.subscription.billing_period_unit }}\",\n        \"plan_amount\": \"{{ $('Loop Over Items').item.json.subscription.plan_amount }}\",\n        \"mrr\": \"{{ $('Loop Over Items').item.json.subscription.mrr }}\",\n        \"status\": \"{{ $('Loop Over Items').item.json.subscription.status }}\",\n        \"current_term_start\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.current_term_start).toFormat('yyyy-MM-dd') }}\",\n        \"current_term_end\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.current_term_end).toFormat('yyyy-MM-dd') }}\",\n        \"created_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.created_at).toFormat('yyyy-MM-dd') }}\",\n        \"started_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.started_at).toFormat('yyyy-MM-dd') }}\",\n        \"updated_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.updated_at).toFormat('yyyy-MM-dd') }}\",\n        \"activated_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.activated_at).toFormat('yyyy-MM-dd') }}\",\n        \"cancelled_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.cancelled_at).toFormat('yyyy-MM-dd') }}\",\n        \"has_scheduled_changes\": \"{{ $('Loop Over Items').item.json.subscription.has_scheduled_changes }}\",\n        \"deleted\": \"{{ $('Loop Over Items').item.json.subscription.deleted }}\",\n        \"due_invoices_count\": \"{{ $('Loop Over Items').item.json.subscription.due_invoices_count }}\",\n        \"has_scheduled_advance_invoices\": \"{{ $('Loop Over Items').item.json.subscription.has_scheduled_advance_invoices }}\"\n    }\n}",
+        "options": {}
+      },
+      "id": "d0b2b617-7de2-4c9b-9e30-4dcba7a0d426",
+      "name": "Update Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2960,
+        -20
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "NdgbeV1lhKBhg4W4",
+          "name": "HubSpot Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/companies/search",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"limit\":1,\"after\":\"0\",\"sorts\":[\"desc\"],\"properties\":[\"hs_object_id\",\"chargebee_customer_id\"],\"filterGroups\":[{\"filters\":[{\"propertyName\":\"chargebee_customer_id\",\"value\":\"{{ $('Loop Over Items').item.json.customer.id }}\",\"operator\":\"EQ\"}]}]}",
+        "options": {}
+      },
+      "id": "3abb11ca-feee-4e67-b318-38d20076143a",
+      "name": "Get Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2940,
+        380
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "NdgbeV1lhKBhg4W4",
+          "name": "HubSpot Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.hubapi.com/crm/v3/objects/2-14800898",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"associations\": [\n        {\n            \"types\": [\n                {\n                    \"associationCategory\": \"USER_DEFINED\",\n                    \"associationTypeId\": 169\n                }\n            ],\n            \"to\": {\n                \"id\": \"{{ $json[\"results\"][0][\"id\"] }}\"\n            }\n        }\n    ],\n    \"properties\": {\n        \"subscription_id\": \"{{ $('Loop Over Items').item.json.subscription.id }}\",\n        \"plan_name\": \"{{ $('Loop Over Items').item.json.subscription.plan_name }}\",\n        \"plan_quantity\": \"{{ $('Loop Over Items').item.json.subscription.plan_quantity }}\",\n        \"plan_unit_price\": \"{{ $('Loop Over Items').item.json.subscription.plan_unit_price }}\",\n        \"billing_period\": \"{{ $('Loop Over Items').item.json.subscription.billing_period }}\",\n        \"billing_period_unit\": \"{{ $('Loop Over Items').item.json.subscription.billing_period_unit }}\",\n        \"plan_amount\": \"{{ $('Loop Over Items').item.json.subscription.plan_amount }}\",\n        \"mrr\": \"{{ $('Loop Over Items').item.json.subscription.mrr }}\",\n        \"status\": \"{{ $('Loop Over Items').item.json.subscription.status }}\",\n        \"current_term_start\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.current_term_start).toFormat('yyyy-MM-dd') }}\",\n        \"current_term_end\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.current_term_end).toFormat('yyyy-MM-dd') }}\",\n        \"created_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.created_at).toFormat('yyyy-MM-dd') }}\",\n        \"started_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.started_at).toFormat('yyyy-MM-dd') }}\",\n        \"updated_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.updated_at).toFormat('yyyy-MM-dd') }}\",\n        \"activated_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.activated_at).toFormat('yyyy-MM-dd') }}\",\n        \"cancelled_at\": \"{{ DateTime.fromSeconds($('Loop Over Items').item.json.subscription.cancelled_at).toFormat('yyyy-MM-dd') }}\",\n        \"has_scheduled_changes\": \"{{ $('Loop Over Items').item.json.subscription.has_scheduled_changes }}\",\n        \"deleted\": \"{{ $('Loop Over Items').item.json.subscription.deleted }}\",\n        \"due_invoices_count\": \"{{ $('Loop Over Items').item.json.subscription.due_invoices_count }}\",\n        \"has_scheduled_advance_invoices\": \"{{ $('Loop Over Items').item.json.subscription.has_scheduled_advance_invoices }}\"\n    }\n}",
+        "options": {}
+      },
+      "id": "b05e0df7-6bba-4202-87f4-233851af9120",
+      "name": "Create Subscription",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3500,
+        420
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "NdgbeV1lhKBhg4W4",
+          "name": "HubSpot Production"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1c345917-d4f8-4e08-935a-b20076cfb646",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 1,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "53c6c007-2935-45c8-acc9-4de10230fd63",
+      "name": "If Company Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "35316cc0-e927-4da5-b756-67d1b8bf71bd",
+      "name": "Wait 1",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2180,
+        260
+      ],
+      "webhookId": "7d730110-3c23-4666-8063-a8c6763913e3"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "fd80c2f7-f428-4d21-884d-defb4ce5e3fd",
+      "name": "Wait 2",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2800,
+        -20
+      ],
+      "webhookId": "7912af78-9120-4891-970d-dcd8bb27751b"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "59665714-cdae-4d1d-af17-6dcd2d9b4712",
+      "name": "Wait 3",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2780,
+        380
+      ],
+      "webhookId": "1fd4c238-41f8-4cd2-b865-43a9f38f08c9"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "98bcb8c0-766f-4d2a-96cd-c6a488598a14",
+      "name": "Wait 4",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3340,
+        420
+      ],
+      "webhookId": "2d61523f-44ca-4dc5-af43-fcc3f3ec5b07"
+    },
+    {
+      "parameters": {},
+      "id": "3715dcea-96b8-4e5c-bc9f-462393a86eac",
+      "name": "When clicking \"Test workflow\"",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        360
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Subscriptions": {
+      "main": [
+        [
+          {
+            "node": "Data Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Exists?": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Subscription": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Wait 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Company": {
+      "main": [
+        [
+          {
+            "node": "If Company Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Subscription": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Subscription": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Company Found": {
+      "main": [
+        [
+          {
+            "node": "Wait 4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1": {
+      "main": [
+        [
+          {
+            "node": "Get Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 2": {
+      "main": [
+        [
+          {
+            "node": "Update Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3": {
+      "main": [
+        [
+          {
+            "node": "Get Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4": {
+      "main": [
+        [
+          {
+            "node": "Create Subscription",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking \"Test workflow\"": {
+      "main": [
+        [
+          {
+            "node": "Get Subscriptions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "92c360b8-3423-47fa-bd9c-9806f631246c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f35844c20bd7f8456f907e3b5a901af1cf08cec7fee985138953357fd244e5bd"
+  },
+  "id": "40bSpqDCG0WwsHSI",
+  "tags": []
+}
